@@ -1,4 +1,4 @@
-# Sujet_2
+# Sujet 2 - Analyse d'image de marque sur les réseaux sociaux
 Natural Language Processing  : analyse des commentaires émis par les internautes sur une marque sur différents réseaux sociaux
 
 
