@@ -9,3 +9,5 @@ L'étude comprendra les éléments suivants :
 On analysera les résultats à la fois quantitativement (car il faudra évaluer la pertinence des clusters formés) et à la fois qualitativement (car il faudra trouver une paramétrisation du modèle choisi qui permette d'obtenir des topics définissables).
  
  
+## Importation de corpus
+*cf : ClaraScanner*
