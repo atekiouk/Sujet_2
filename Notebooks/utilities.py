@@ -347,7 +347,7 @@ def get_normalized_nb_punct(
 
 
 
-def del_double(
+def delete_duplicates(
     corpus: list, 
     publication_time: list, 
     limit: float, 
@@ -374,8 +374,7 @@ def del_double(
     list of str
         The list of strings with duplicates removed.
     """
-    
-    t = corpus.copy()
+    t = [clean_hashtag(s).strip() for s in corpus]
     distance = method #initialisiation de levenshtein avec la distance normalisée.
     i = 0
     r = len(t)
@@ -383,7 +382,7 @@ def del_double(
         r = len(t)
         j=i+1
         while(j<r):
-            if(distance(clean_hashtag(t[i]).strip(),clean_hashtag(t[j]).strip()) <= limit ): # Si la distance entre les deux élemens de la liste inf à seuil
+            if(distance(t[i],t[j]) <= limit ): # Si la distance entre les deux élemens de la liste inf à seuil
                 if(publication_time[i]<publication_time[j]):
                     del t[j] #delete
                     r = len(t) #on actualise la taille de la liste
