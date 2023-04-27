@@ -81,11 +81,12 @@ def clear_trailing_hash(
     -------
     None
         The function only modifies the input corpus list in place.
-    """
+            """  
     for i in range(len(corpus)):
-        if(corpus[i][-1]=="#"):
+        corpus[i] = str(corpus[i])
+        while(corpus[i][-1]=="#" or corpus[i][-1]=="' '"):
             corpus[i] = corpus[i].rstrip(corpus[i][-1])
-            
+    return corpus
             
             
             
@@ -232,13 +233,94 @@ def create_dummies(corpus: pd.Series,
         .head(top)
         .index
     )
-
-    dummy = pd.DataFrame(index=corpus.index)
+    indexes = ["has_emoji"+str(i) for i in range(top)]
+    dummy = pd.DataFrame(index=indexes)
     for e in top_elements:
         dummy[e] = corpus.apply(lambda text: 1 if e in [token.text for token in nlp(text) if detector(token)] else 0)
 
     return dummy
 
+
+
+def get_presence_of_URL(
+    data: pd.Series, 
+    nlp: spacy.language.Language) -> pd.Series:
+    """
+    Detect the presence of URLs in a pandas Series of text using spacy.
+
+    Parameters
+    ----------
+    data : pd.Series
+        A pandas Series containing the text to analyze.
+    nlp_model : spacy.language.Language
+        A pre-trained spacy model.
+
+    Returns
+    -------
+    pd.Series
+        A pandas Series containing 1 if an URL is detected, 0 otherwise.
+    """
+    has_url = []
+    for text in data:
+        doc = nlp(text)
+        found_url = False
+        for token in doc:
+            if token.like_url:
+                found_url = True
+                break
+        if found_url:
+            has_url.append(1)
+        else:
+            has_url.append(0)
+    return pd.Series(has_url)
+
+
+
+def get_presence_of_phone_numbers(
+    texts: pd.Series, nlp: spacy.language
+) -> pd.Series:
+    """
+    Detect if a phone number is present in a pandas Series of text using spacy model.
+
+    Parameters
+    ----------
+    texts : pandas.core.series.Series
+        The pandas series of texts to search for phone numbers.
+    nlp : spacy.language
+        The spacy model used for text processing.
+
+    Returns
+    -------
+    pandas.core.series.Series
+        A pandas series with name 'has_phone_number', containing 1 if a phone number is present in the corresponding
+        text of the input series, and 0 otherwise.
+    """
+    # Define the regular expression for phone numbers
+    regex = r"\+?\d{1,3}[-.\s]?\(?\d{1,3}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}"
+
+    # Compile the regular expression pattern
+    pattern = re.compile(regex)
+
+    # Define a function to test if a text contains a phone number
+    def has_phone_number(text):
+        # Parse the text with the spacy model
+        doc = nlp(text)
+
+        # Check if any entity in the document matches the phone number pattern
+        for entity in doc.ents:
+            if entity.label_ == "PHONE_NUMBER" or pattern.search(entity.text):
+                return 1
+
+        # Check if the pattern matches the text directly
+        if pattern.search(text):
+            return 1
+
+        return 0
+
+    # Apply the has_phone_number function to each text in the input series
+    result = texts.apply(has_phone_number)
+
+    return result
 
 
 def get_word_ratio(
