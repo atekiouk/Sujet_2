@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 import spacy
 import re
 import spacy.lang.en
@@ -7,6 +9,7 @@ from spacy.vocab               import Vocab
 from spacy.language            import Language
 from spacy.tokens              import Token
 from spacymoji                 import Emoji
+from sklearn.metrics           import confusion_matrix
 
 
 def create_dummies(
@@ -220,8 +223,10 @@ def create_dummies(corpus: pd.Series,
         return token._.is_emoji
     if element == 'hashtag':
         detector = _is_hashtag
+        prefix='has_hashtag'
     elif element == 'emoji':
         detector = _is_emoji
+        prefix='has_emoji'
     else:
         raise ValueError("Only 'hashtag' and 'emoji' elements are supported.")
 
@@ -233,8 +238,7 @@ def create_dummies(corpus: pd.Series,
         .head(top)
         .index
     )
-    indexes = ["has_emoji"+str(i) for i in range(top)]
-    dummy = pd.DataFrame(index=indexes)
+    dummy = pd.DataFrame(index=corpus.index)
     for e in top_elements:
         dummy[e] = corpus.apply(lambda text: 1 if e in [token.text for token in nlp(text) if detector(token)] else 0)
 
@@ -243,10 +247,11 @@ def create_dummies(corpus: pd.Series,
 
 
 def get_presence_of_URL(
-    data: pd.Series, 
-    nlp: spacy.language.Language) -> pd.Series:
+    corpus: pd.Series, 
+    nlp: spacy.language.Language
+) -> pd.Series:
     """
-    Detect the presence of URLs in a pandas Series of text using spacy.
+    Detect the presence of URLs in a pandas Series of text .
 
     Parameters
     ----------
@@ -261,7 +266,7 @@ def get_presence_of_URL(
         A pandas Series containing 1 if an URL is detected, 0 otherwise.
     """
     has_url = []
-    for text in data:
+    for text in corpus:
         doc = nlp(text)
         found_url = False
         for token in doc:
@@ -276,11 +281,47 @@ def get_presence_of_URL(
 
 
 
-def get_presence_of_phone_numbers(
-    texts: pd.Series, nlp: spacy.language
+def get_presence_of_currency_symbol(
+    corpus: pd.Series, 
+    nlp: spacy.language.Language
 ) -> pd.Series:
     """
-    Detect if a phone number is present in a pandas Series of text using spacy model.
+    Detect the presence of currency symbols in a pandas Series of text .
+
+    Parameters
+    ----------
+    corpus : pd.Series
+        A pandas Series containing the text to analyze.
+    nlp_model : spacy.language.Language
+        A pre-trained spacy model.
+
+    Returns
+    -------
+    pd.Series
+        A pandas Series containing 1 if an URL is detected, 0 otherwise.
+    """
+    has_currency = []
+    for text in corpus:
+        doc = nlp(text)
+        found_currency = False
+        for token in doc:
+            if token.is_currency:
+                found_currency = True
+                break
+        if found_currency:
+            has_currency.append(1)
+        else:
+            has_currency.append(0)
+    return pd.Series(has_currency)
+
+
+
+def get_presence_of_phone_numbers(
+    corpus: pd.Series, 
+    nlp: spacy.language
+) -> pd.Series:
+    """
+    Detect if a phone number is present in a pandas Series of text .
 
     Parameters
     ----------
@@ -318,7 +359,7 @@ def get_presence_of_phone_numbers(
         return 0
 
     # Apply the has_phone_number function to each text in the input series
-    result = texts.apply(has_phone_number)
+    result = corpus.apply(has_phone_number)
 
     return result
 
@@ -516,3 +557,30 @@ def train_test(
     test = data.drop(train.index)
     
     return train, test
+
+
+
+
+def plot_confusion_matrix(y_true, y_pred):
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    
+    # Define labels for the classes
+    labels = sorted(list(set(y_true)))
+    
+    # Define figure size and colors
+    fig, ax = plt.subplots(figsize=(8, 8))
+    cmap = sns.color_palette("Blues")
+    
+    # Create heatmap with annotations
+    sns.heatmap(cm, annot=True, cmap=cmap, ax=ax, fmt='g', cbar=False)
+    
+    # Set labels for axes and title
+    ax.set_xlabel('Predicted labels', fontsize=12)
+    ax.set_ylabel('True labels', fontsize=12)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_yticklabels(labels, fontsize=10)
+    ax.set_title('Confusion Matrix', fontsize=14, fontweight='bold')
+    
+    # Show plot
+    plt.show()
