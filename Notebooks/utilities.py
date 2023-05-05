@@ -10,6 +10,31 @@ from spacy.language            import Language
 from spacy.tokens              import Token
 from spacymoji                 import Emoji
 from sklearn.metrics           import confusion_matrix
+from scipy                     import stats
+
+
+def t_test(
+    dt : pd.DataFrame,
+    var : str,
+    class_ : str,
+          ):
+    """
+    Calculates the t-test statistic and p-value for the difference in means between two groups, based on the specified variable and class.
+Parameters
+----------
+var : str
+    The name of the variable to test.
+class_ : str
+    The name of the class (group) variable.
+Prints
+------
+t stat : float
+    The t-test statistic for the difference in means between the two groups. 
+p-value : float
+    The p-value for the t-test, indicating the probability of observing the given difference in means by chance.
+    """
+    t_stat, p_value = stats.ttest_ind(dt[dt[class_]==0][var], dt[dt[class_]==1][var], equal_var=False)
+    print(f"t stat : {t_stat}\n\np-value : {p_value}")
 
 
 def create_dummies(
