@@ -4,6 +4,11 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import spacy
 import re
+import sklearn
+import random
+import textdistance
+import umap
+import pickle
 import spacy.lang.en
 from spacy.vocab               import Vocab
 from spacy.language            import Language
@@ -11,6 +16,20 @@ from spacy.tokens              import Token
 from spacymoji                 import Emoji
 from sklearn.metrics           import confusion_matrix
 from scipy                     import stats
+from sklearn.tree              import DecisionTreeClassifier
+from sklearn.model_selection   import train_test_split
+from sklearn                   import metrics
+from sklearn.model_selection   import GridSearchCV
+from transformers              import BertTokenizer, BertModel
+from sentence_transformers     import SentenceTransformer
+from sklearn.metrics           import roc_curve
+from umap                      import UMAP
+from typing                    import Optional
+from sklearn.decomposition     import PCA
+from sklearn.linear_model      import LogisticRegression
+
+
+
 
 
 def t_test(
@@ -609,3 +628,265 @@ def plot_confusion_matrix(y_true, y_pred):
     
     # Show plot
     plt.show()
+    
+    
+def plot_roc(y_test : pd.Series,
+             y_score : pd.Series
+            )->None:
+    fpr, tpr, _ = roc_curve(y_test, y_score)
+    roc_auc = metrics.auc(fpr, tpr)
+
+    # Tracé de la courbe ROC avec seaborn
+    sns.set(style='whitegrid', font_scale=1)
+    sns.lineplot(x=fpr, y=tpr, color='hotpink', label=f'AUC = {roc_auc:.10f}')
+    plt.plot([0, 1], [0, 1], color='orangered', lw=2, linestyle='--')
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC curve ')
+    plt.legend(loc='lower right')
+    plt.scatter(fpr,tpr)
+    plt.show()
+    
+    
+def fit_params(
+    X: pd.DataFrame,
+    y: pd.Series,
+    grid_params: dict,
+    predictor = DecisionTreeClassifier(),
+    hyperopt_params: Optional[dict] = None,
+)-> dict:
+    """
+    Fits a given model on the provided dataset after reducing dimensions with the provided reducer.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        The input DataFrame containing the features.
+    y : pd.Series
+        The target variable.
+    grid_params : dict
+        The dictionary of hyperparameter grids to search over using GridSearchCV.
+    predictor : object, optional
+        The model object implementing the scikit-learn estimator interface, by default DecisionTreeClassifier().
+    hyperopt_params : dict, optional
+        Additional parameters to be passed to the GridSearchCV for hyperparameter optimization, by default None.
+
+    Returns
+    -------
+    dict
+        The best parameters found by the hyperparameter optimization.
+    """
+    if hyperopt_params is None:
+        hyperopt_params = {}
+    
+    # perform hyperopt with model on reduced data
+    return (
+        GridSearchCV(
+            estimator=predictor,
+            param_grid=grid_params,
+            **hyperopt_params
+        )
+        .fit(X, y)
+        .best_params_
+    )
+    
+    
+def reducing_grid_s(X_train: pd.DataFrame,
+                X_test: pd.DataFrame,
+                y_train: pd.DataFrame, 
+                y_test: pd.DataFrame,
+                reduc: object,
+                predic: object,
+                grid_params: dict
+               )-> tuple[object, float]:
+    """
+    Perform dimensionality reduction and grid search on a given dataset using a specified reducer and predictor.
+
+    Parameters:
+        X_train (pd.DataFrame): Training data features.
+        X_test (pd.DataFrame): Testing data features.
+        y_train (pd.DataFrame): Training data labels.
+        y_test (pd.DataFrame): Testing data labels.
+        reduc (object): Dimensionality reduction model (e.g., PCA, UMAP).
+        predic (object): Predictor model (e.g., DecisionTreeClassifier, LogisticRegression).
+        grid_params (dict): Grid search parameters for the predictor.
+
+    Returns:
+        tuple[object, float]: Trained model and its corresponding AUC score.
+    """
+    hyperopt_params={
+                "scoring": "roc_auc",
+                "cv": 5,
+                "refit": True}
+    reducer = reduc.fit(X_train)
+    predictor = predic
+    X_train_reduced = reducer.transform(X_train)
+    X_test_reduced = reducer.transform(X_test)
+    opt_params = fit_params(
+            X=X_train_reduced,
+            y=y_train,
+            predictor=predictor,
+            grid_params=grid_params,
+            hyperopt_params = hyperopt_params)
+    model = predictor.set_params(**opt_params).fit(X_train_reduced, y_train)
+    y_pred = model.predict(X_test_reduced)
+    y_score = model.predict_proba(X_test_reduced)[:, 1]
+    fpr, tpr, _ = metrics.roc_curve(y_test, y_score)
+    auc = metrics.auc(fpr, tpr)
+    return model,auc
+    
+    
+def auto_model_selection(
+X : pd.Series,
+y : pd.Series,
+dimension_range : range
+)-> tuple[object, float, int]:
+    """
+    Automatically selects the best model using dimensionality reduction techniques (PCA, UMAP)
+    and evaluates their performance based on ROC AUC score.
+
+    Parameters
+    ----------
+    X : pd.Series
+        The input feature data.
+    y : pd.Series
+        The target variable.
+    dimension_range : range
+        The range of dimensions to explore for dimensionality reduction.
+
+    Returns
+    -------
+    Tuple[object, float, int]
+        A tuple containing the best model, the best ROC AUC score, and the optimal number of dimensions.
+    """
+    best_auc = 0
+    X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.2, random_state=42)
+    grid_params_lr = {
+                'solver': ['lbfgs', 'liblinear', 'newton-cg','newton-cholesky','sag','saga']
+            }
+    grid_params_tree = {
+                'criterion': ['entropy', 'gini', 'log_loss'],
+                'max_depth' : np.arange(2, 6, dtype=int),
+                'ccp_alpha' : np.linspace(0.0, 0.20, 5)
+            }
+    auc_scores = {}
+
+    for dim in dimension_range:
+        for pred_grid in [{'predictor' : DecisionTreeClassifier(random_state=42),'grid' : grid_params_tree}, {'predictor' : LogisticRegression(random_state = 42,max_iter=1000), 'grid' : grid_params_lr}]:
+            for red in [UMAP(n_components = dim), PCA(n_components = dim)]:
+                model,auc = reducing_grid_s(
+                    X_train=X_train,
+                    X_test=X_test,
+                    y_train=y_train, 
+                    y_test=y_test,
+                    reduc=red,
+                    predic=pred_grid['predictor'],
+                    grid_params=pred_grid['grid']
+                   )
+                if red.__class__.__name__ not in auc_scores:
+                    auc_scores[red.__class__.__name__] = {}
+                if pred_grid['predictor'].__class__.__name__ not in auc_scores[red.__class__.__name__]:
+                    auc_scores[red.__class__.__name__][pred_grid['predictor'].__class__.__name__] = []
+
+                auc_scores[red.__class__.__name__][pred_grid['predictor'].__class__.__name__].append(auc)
+                if(auc>best_auc):
+                    best_auc = auc
+                    best_model = model
+                    opt_nb_dim = dim
+                    reducer = red
+
+    plt.figure(figsize=(10, 6))
+    for reducer, predictor_scores in auc_scores.items():
+        for predictor, scores in predictor_scores.items():
+            plt.plot(list(dimension_range), scores, label=f"{reducer} + {predictor}")
+
+    plt.xlabel("Number of Dimensions")
+    plt.ylabel("AUC Score")
+    plt.title("AUC Score vs. Number of Dimensions")
+    plt.legend()
+    plt.show()
+
+    return best_model,best_auc,opt_nb_dim,reducer
+
+
+
+def evaluate(
+    y_test: pd.Series,
+    y_pred: pd.Series,
+    y_score: pd.Series,
+) -> None:
+    """
+    Evaluate the performance of a binary classification model by computing various metrics and plotting the confusion matrix.
+
+    Parameters
+    ----------
+    y_test : pd.Series
+        The true labels of the test set.
+    y_pred : pd.Series
+        The predicted labels of the test set.
+    y_score : pd.Series
+        The predicted scores or probabilities of the positive class for the test set.
+
+    Returns
+    -------
+    None
+
+    Prints
+    ------
+    AUC : float
+        The Area Under the ROC Curve (AUC) score.
+    Accuracy score : float
+        The accuracy score, which measures the proportion of correct predictions.
+    Precision score : float
+        The precision score, which measures the ability of the model to correctly identify positive samples.
+    Recall score : float
+        The recall score, which measures the ability of the model to correctly identify positive samples among all true positive samples.
+
+    Displays
+    --------
+    Confusion Matrix : matplotlib.pyplot figure
+        A visual representation of the confusion matrix, showing the true and predicted labels.
+
+    """
+    fpr, tpr, thresholds = metrics.roc_curve(y_test, y_score)
+    print(f"AUC : {metrics.auc(fpr, tpr):.3f}")
+    print(f"Accuracy score : {metrics.accuracy_score(y_test, y_pred):.3f}")
+    print(f"Precision score : {metrics.precision_score(y_test, y_pred):.3f}")
+    print(f"Recall score : {metrics.recall_score(y_test, y_pred):.3f}")
+    plot_confusion_matrix(y_true=y_test, y_pred=y_pred)
+    
+    
+    
+def junk_classifier(
+Corpus_instagram : pd.DataFrame,
+model : object,
+reducer : object
+)-> pd.DataFrame:
+    """
+    Applies junk classification on the given Instagram corpus using logistic regression.
+
+    Parameters:
+        Corpus_instagram (pd.DataFrame): The Instagram corpus containing the text data.
+        model : The sklearn model we will use to classify the Instagram publications.
+        reducer  : Dimensionality reduction model (e.g., PCA, UMAP).
+    Returns:
+        pd.DataFrame: Subset of Corpus_instagram containing only the predicted non junk entries.
+    """
+    #delete exact same or similar publication
+    dist = textdistance.levenshtein.normalized_distance
+    Corpus_instagram = delete_duplicates(Corpus_instagram['text'].tolist(),Corpus_instagram['publication_time'].tolist(),0.6,dist)
+    
+    #Encode corpus
+    encoder = SentenceTransformer('all-MiniLM-L6-v2')
+    Corpus_encoded = encoder.encode(Corpus_instagram['text'].tolist())
+    
+    #Reduce to 59 dimensions using UMAP
+    Corpus_encoded_reduced =  reducer.transform(Corpus_encoded)
+    
+    #Predict junk publication among the corpus
+    proba_threshold = 0.6
+    y_pred = np.where(model.predict_proba(Corpus_encoded_reduced)[:, 1] > proba_threshold, 1, 0)
+    
+    return Corpus_instagram[y_pred==1]
