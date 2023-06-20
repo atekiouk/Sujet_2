@@ -742,7 +742,7 @@ def auto_model_selection(
 X : pd.Series,
 y : pd.Series,
 dimension_range : range
-)-> tuple[object, float, int]:
+)-> tuple[object,float,int,object]:
     """
     Automatically selects the best model using dimensionality reduction techniques (PCA, UMAP)
     and evaluates their performance based on ROC AUC score.
@@ -798,9 +798,9 @@ dimension_range : range
                     reducer = red
 
     plt.figure(figsize=(10, 6))
-    for reducer, predictor_scores in auc_scores.items():
-        for predictor, scores in predictor_scores.items():
-            plt.plot(list(dimension_range), scores, label=f"{reducer} + {predictor}")
+    for reducer_, predictor_scores in auc_scores.items():
+        for predictor_, scores in predictor_scores.items():
+            plt.plot(list(dimension_range), scores, label=f"{reducer_} + {predictor_}")
 
     plt.xlabel("Number of Dimensions")
     plt.ylabel("AUC Score")
@@ -886,7 +886,7 @@ reducer : object
     Corpus_encoded_reduced =  reducer.transform(Corpus_encoded)
     
     #Predict junk publication among the corpus
-    proba_threshold = 0.6
+    proba_threshold = 0.5
     y_pred = np.where(model.predict_proba(Corpus_encoded_reduced)[:, 1] > proba_threshold, 1, 0)
     
     return Corpus_instagram[y_pred==1]
