@@ -629,24 +629,43 @@ def plot_confusion_matrix(y_true, y_pred):
     # Show plot
     plt.show()
     
-    
+
+
 def plot_roc(y_test : pd.Series,
-             y_score : pd.Series
-            )->None:
+             y_score : pd.Series,
+             color : str
+            ) -> None:
+    """
+    Plot the Receiver Operating Characteristic (ROC) curve.
+
+    Parameters
+    ----------
+    y_test : pd.Series
+        True binary labels.
+    y_score : pd.Series
+        Target scores, can either be probability estimates of the positive class or
+        confidence values.
+    color : str
+        Color for the ROC curve and points.
+
+    Returns
+    -------
+    None
+    """
     fpr, tpr, _ = roc_curve(y_test, y_score)
     roc_auc = metrics.auc(fpr, tpr)
 
     # Tracé de la courbe ROC avec seaborn
     sns.set(style='whitegrid', font_scale=1)
-    sns.lineplot(x=fpr, y=tpr, color='hotpink', label=f'AUC = {roc_auc:.10f}')
+    sns.lineplot(x=fpr, y=tpr, color=color, label=f'AUC = {roc_auc:.2f}')
     plt.plot([0, 1], [0, 1], color='orangered', lw=2, linestyle='--')
     plt.xlim([0, 1])
     plt.ylim([0, 1])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title('ROC curve ')
+    plt.title('ROC curve')
     plt.legend(loc='lower right')
-    plt.scatter(fpr,tpr)
+    plt.scatter(fpr, tpr, color=color)
     plt.show()
     
     
